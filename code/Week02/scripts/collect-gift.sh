@@ -10,6 +10,7 @@ pp="$assets/protocol-parameters.json"
 body="$assets/collect-gift.txbody"
 tx="$assets/collect-gift.tx"
 
+# txin - the input we want to collect, the gift
 # Query the protocol parameters \
 
 cardano-cli query protocol-parameters \
