@@ -20,19 +20,25 @@ function removeChildren(elt) {
 }
 
 async function loadCardano() {
-    const nami = window.cardano.nami;
-    if (!nami) {
-        setTimeout(loadCardano);
-    } else {
-        const api = await nami.enable();
-        console.log('nami enabled');
-        const lucid = await L.Lucid.new(
-            new L.Blockfrost("https://cardano-preview.blockfrost.io/api/v0", "preview1JXEDVldkIyBkxEUrEx3n9ll4afFK1Xj"),
-            "Preview",
-        );
-        console.log('lucid active');
-        lucid.selectWallet(api);
-        return lucid;
+    try {
+        const nami = window.cardano.nami;
+        console.log('loadCardano', nami)
+        if (!nami) {
+            setTimeout(loadCardano);
+        } else {
+            const api = await nami.enable();
+            console.log('nami enabled');
+
+            const lucid = await L.Lucid.new(
+                new L.Blockfrost("https://cardano-preview.blockfrost.io/api/v0", 'previewBxbDJLBUzeaxlLzb3K7Ki5N1HkixAmGT'),//"preview1JXEDVldkIyBkxEUrEx3n9ll4afFK1Xj"),
+                "Preview",
+            );
+            console.log('lucid active');
+            lucid.selectWallet(api);
+            return lucid;
+        }
+    } catch (error) {
+        console.log('caught error', error)
     }
 }
 

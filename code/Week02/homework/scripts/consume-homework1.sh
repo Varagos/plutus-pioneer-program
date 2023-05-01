@@ -2,11 +2,8 @@
 
 assets=/workspace/code/Week02/assets
 keypath=/workspace/keys
-# Name of collector, in order to sign
 name="$1"
-# UTXo to be spent in case of malicious use, if transaction doesn't validate, usually something with 5 ada is more than enough
 collateral="$2"
-# The actual input we want to collect
 txin="$3"
 
 pp="$assets/protocol-parameters.json"
@@ -25,9 +22,9 @@ cardano-cli transaction build \
     --babbage-era \
     --testnet-magic 2 \
     --tx-in "$txin" \
-    --tx-in-script-file "$assets/gift.plutus" \
+    --tx-in-script-file "$assets/homework1.plutus" \
     --tx-in-inline-datum-present \
-    --tx-in-redeemer-file "$assets/unit.json" \
+    --tx-in-redeemer-file "$assets/truetrue.tuple.json" \
     --tx-in-collateral "$collateral" \
     --change-address "$(cat "$keypath/$name.addr")" \
     --protocol-params-file "$pp" \

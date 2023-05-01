@@ -30,6 +30,11 @@ data VestingDatum = VestingDatum
 
 unstableMakeIsData ''VestingDatum
 
+{-
+We don't need a Redeemer. The Datum contains the beneficiary, limiting who can consume this transaction,
+We make use of context to get the txInfo, in order to check whethers its signature matches our beneficiary's.
+-}
+
 {-# INLINABLE mkVestingValidator #-}
 mkVestingValidator :: VestingDatum -> () -> ScriptContext -> Bool
 mkVestingValidator dat () ctx = traceIfFalse "beneficiary's signature missing" signedByBeneficiary &&
