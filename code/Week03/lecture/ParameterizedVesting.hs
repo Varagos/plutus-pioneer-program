@@ -45,6 +45,7 @@ mkParameterizedVestingValidator params () () ctx =
 
 {-# INLINABLE  mkWrappedParameterizedVestingValidator #-}
 mkWrappedParameterizedVestingValidator :: VestingParams -> BuiltinData -> BuiltinData -> BuiltinData -> ()
+-- Point-free version of: mkWrappedParameterizedVestingValidator p = wrapValidator (mkParameterizedVestingValidator p)
 mkWrappedParameterizedVestingValidator = wrapValidator . mkParameterizedVestingValidator
 
 validator :: VestingParams -> Validator

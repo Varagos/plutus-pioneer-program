@@ -7,12 +7,14 @@
 
 module Homework1 where
 
-import           Plutus.V2.Ledger.Api (BuiltinData, POSIXTime, PubKeyHash,
-                                       ScriptContext, Validator,
-                                       mkValidatorScript)
+import           Plutus.V2.Ledger.Api (BuiltinData, POSIXTime, PubKeyHash ,
+                                       ScriptContext(scriptContextTxInfo), Validator,
+                                       mkValidatorScript, TxInfo (txInfoValidRange), from, to)
 import           PlutusTx             (compile, unstableMakeIsData)
-import           PlutusTx.Prelude     (Bool (..))
+import           PlutusTx.Prelude     (Bool (..), otherwise, (.), ($), (&&),  AdditiveSemigroup ((+)))
 import           Utilities            (wrapValidator)
+import Plutus.V2.Ledger.Contexts (txSignedBy)
+import Plutus.V1.Ledger.Interval (contains)
 
 ---------------------------------------------------------------------------------------------------
 ----------------------------------- ON-CHAIN / VALIDATOR ------------------------------------------
@@ -29,7 +31,26 @@ unstableMakeIsData ''VestingDatum
 -- This should validate if either beneficiary1 has signed the transaction and the current slot is before or at the deadline
 -- or if beneficiary2 has signed the transaction and the deadline has passed.
 mkVestingValidator :: VestingDatum -> () -> ScriptContext -> Bool
-mkVestingValidator _dat () _ctx = False -- FIX ME!
+mkVestingValidator dat () ctx 
+    | isSignedByFirstBeneficiary && currentSlotBeforeDeadline = True
+    | isSignedBySecondBeneficiary && deadlineHasPassed = True
+    | otherwise = False
+    where
+        isSignedByFirstBeneficiary =  isSignedByBeneficiary . beneficiary1  $ dat
+        isSignedBySecondBeneficiary = isSignedByBeneficiary . beneficiary2 $ dat
+        txInfo :: TxInfo
+        txInfo = scriptContextTxInfo ctx
+
+        isSignedByBeneficiary :: PubKeyHash -> Bool
+        isSignedByBeneficiary = txSignedBy txInfo
+
+        currentSlotBeforeDeadline = contains (to $ deadline dat) $ txInfoValidRange txInfo
+
+        -- deadlineHasPassed = not $ overlaps (to $ deadline dat) $ txInfoValidRange txInfo
+        deadlineHasPassed = contains (from (1 + deadline dat)) $ txInfoValidRange txInfo
+
+
+
 
 {-# INLINABLE  mkWrappedVestingValidator #-}
 mkWrappedVestingValidator :: BuiltinData -> BuiltinData -> BuiltinData -> ()
