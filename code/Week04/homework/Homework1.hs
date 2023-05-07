@@ -46,6 +46,10 @@ data MisteryDatum = MisteryDatum
 
 unstableMakeIsData ''MisteryDatum
 
+{-
+    Either the beneficiary1 has signed and has claimed the money before the deadline passes,
+    or the beneficiary2 has signed and the deadline has passed
+-}
 {-# INLINABLE mkMisteryValidator #-}
 mkMisteryValidator :: MisteryDatum -> () -> ScriptContext -> Bool
 mkMisteryValidator dat () ctx =

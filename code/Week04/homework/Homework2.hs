@@ -28,6 +28,10 @@ HINT: If you get stuck, take a look at Week03's lecture
 
 ---------------------------------------------------------------------------------------------------
 ----------------------------------- ON-CHAIN / VALIDATOR ------------------------------------------
+{-
+    It's the vesting smart contract, but the beneficiary is parameterized, while the datum 
+    consists of only the deadline. As a result there will be one smart contract address per beneficiary
+-}
 
 {-# INLINABLE mkParameterizedMisteryValidator #-}
 mkParameterizedMisteryValidator :: PubKeyHash -> POSIXTime -> () -> ScriptContext -> Bool

@@ -11,16 +11,22 @@ import {
     AddressDetails,
 } from "https://deno.land/x/lucid@0.9.1/mod.ts"
 // create a seed.ts file with your seed
-import { secretSeed } from "./seed.ts"
+import { secretSeed, blockfrostKey } from "./seed.ts"
 
 // set blockfrost endpoint
 const lucid = await Lucid.new(
   new Blockfrost(
     "https://cardano-preprod.blockfrost.io/api/v0",
-    "insert you own api key here"
+    blockfrostKey
+    // "insert you own api key here"
   ),
   "Preprod"
 );
+
+// const lucid = await Lucid.new(
+//     new Blockfrost("https://cardano-preview.blockfrost.io/api/v0", 'previewBxbDJLBUzeaxlLzb3K7Ki5N1HkixAmGT'),
+//     "Preview",
+// );
 
 // load local stored seed as a wallet into lucid
 lucid.selectWalletFromSeed(secretSeed);
