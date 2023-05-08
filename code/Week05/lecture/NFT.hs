@@ -26,6 +26,7 @@ import           Utilities                  (bytesToHex, currencySymbol,
                                              wrapPolicy, writeCodeToFile,
                                              writePolicyToFile)
 
+-- Parameterized by 2 params now, tokenName And the utxo. The condition is also that we mint only once 1 token.
 {-# INLINABLE mkNFTPolicy #-}
 mkNFTPolicy :: TxOutRef -> TokenName -> () -> ScriptContext -> Bool
 mkNFTPolicy oref tn () ctx = traceIfFalse "UTxO not consumed"   hasUTxO           &&
@@ -34,9 +35,11 @@ mkNFTPolicy oref tn () ctx = traceIfFalse "UTxO not consumed"   hasUTxO         
     info :: TxInfo
     info = scriptContextTxInfo ctx
 
+    -- Whether the id of the input(txInInfoOutRef) is equal oref
     hasUTxO :: Bool
     hasUTxO = any (\i -> txInInfoOutRef i == oref) $ txInfoInputs info
 
+    -- flattenValue converts the nested currency &value map into list of triples
     checkMintedAmount :: Bool
     checkMintedAmount = case flattenValue (txInfoMint info) of
         [(_, tn'', amt)] -> tn'' == tn && amt == 1
