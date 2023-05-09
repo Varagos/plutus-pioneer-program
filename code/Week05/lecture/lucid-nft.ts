@@ -25,11 +25,13 @@ lucid.selectWalletFromSeed(secretSeed);
 const addr: Address = await lucid.wallet.address();
 console.log("own address: " + addr);
 
+// We need the input we are going to consume
 const utxos = await lucid.utxosAt(addr);
 const utxo = utxos[0];
 console.log("utxo: " + utxo.txHash + "#" + utxo.outputIndex);
 
 const tn = fromText("PPP NFT");
+// TxId, index, tokenName
 const Params = Data.Tuple([Data.String, Data.BigInt, Data.String]);
 type Params = Data.Static<typeof Params>;
 const nftPolicy: MintingPolicy = {
@@ -49,6 +51,7 @@ const tx = await lucid
     .newTx()
     .mintAssets({[unit]: 1n}, Data.void())
     .attachMintingPolicy(nftPolicy)
+    // Need to make sure to spend the input, which is also the parameter
     .collectFrom([utxo])
     .complete();
 

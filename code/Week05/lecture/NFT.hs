@@ -45,12 +45,17 @@ mkNFTPolicy oref tn () ctx = traceIfFalse "UTxO not consumed"   hasUTxO         
         [(_, tn'', amt)] -> tn'' == tn && amt == 1
         _                -> False
 
+{- The idea is the txoutref is a record with 2 fields, txId and index,
+so 3 builtindata, 2 for txoutref, 1 for tokenName, makes it easier to work with lucid
+String -> Number -> String -> 
+-}
 {-# INLINABLE mkWrappedNFTPolicy #-}
 mkWrappedNFTPolicy :: BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> ()
 mkWrappedNFTPolicy tid ix tn' = wrapPolicy $ mkNFTPolicy oref tn
   where
     oref :: TxOutRef
     oref = TxOutRef
+        -- deserialize it as a string, and apply the TxId constructor to it
         (TxId $ PlutusTx.unsafeFromBuiltinData tid)
         (PlutusTx.unsafeFromBuiltinData ix)
 
@@ -69,10 +74,11 @@ nftPolicy oref tn = mkMintingPolicyScript $
 
 ---------------------------------------------------------------------------------------------------
 ------------------------------------- HELPER FUNCTIONS --------------------------------------------
-
+-- For off chain code like lucid, where we want the parameters applied in the serialized from
 saveNFTCode :: IO ()
 saveNFTCode = writeCodeToFile "assets/nft.plutus" nftCode
 
+-- If we want a serialized policy, knowing the parameters
 saveNFTPolicy :: TxOutRef -> TokenName -> IO ()
 saveNFTPolicy oref tn = writePolicyToFile
     (printf "assets/nft-%s#%d-%s.plutus"
