@@ -17,6 +17,7 @@ import           Text.Printf               (printf)
 import           Utilities                 (currencySymbol, wrapPolicy,
                                             writeCodeToFile, writePolicyToFile)
 
+-- The condition is that the owner of the pubKeyhas has to sign the transaction
 {-# INLINABLE mkSignedPolicy #-}
 mkSignedPolicy :: PubKeyHash -> () -> ScriptContext -> Bool
 mkSignedPolicy pkh () ctx = traceIfFalse "missing signature" $ txSignedBy (scriptContextTxInfo ctx) pkh
