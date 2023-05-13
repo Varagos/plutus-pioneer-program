@@ -20,14 +20,14 @@ type NegativeRTimedRedeemer = L.Data.Static<typeof NegativeRTimedRedeemer>;
 
 // the function that given the context of lucid, the wallet,the datum and sends 10 ada to the script address.
 async function sendToScript(
-    lucid: L.Lucid,
-    userPrivKey: L.PrivateKey,
-    dtm: NegativeRTimedDatum
-  ): Promise<L.TxHash> {
+  lucid: L.Lucid,
+  userPrivKey: L.PrivateKey,
+  dtm: NegativeRTimedDatum
+): Promise<L.TxHash> {
   lucid.selectWalletFromPrivateKey(userPrivKey);
   const tx = await lucid
     .newTx()
-    .payToContract(negativeRTimedAddr, { inline: L.Data.to<NegativeRTimedDatum>(dtm,NegativeRTimedDatum) }, { lovelace: 10000000n })
+    .payToContract(negativeRTimedAddr, { inline: L.Data.to<NegativeRTimedDatum>(dtm, NegativeRTimedDatum) }, { lovelace: 10000000n })
     .complete();
   const signedTx = await tx.sign().complete();
   const txHash = await signedTx.submit();
@@ -36,32 +36,34 @@ async function sendToScript(
 
 // the function that given the context of lucid and a negative redeemer, grabs funds from the script address.
 async function grabFunds(
-    lucid: L.Lucid,
-    emulator: L.Emulator,
-    userPrivKey: L.PrivateKey,
-    dtm: NegativeRTimedDatum,
-    r: NegativeRTimedRedeemer
-  ): Promise<L.TxHash> {
+  lucid: L.Lucid,
+  emulator: L.Emulator,
+  userPrivKey: L.PrivateKey,
+  dtm: NegativeRTimedDatum,
+  r: NegativeRTimedRedeemer
+): Promise<L.TxHash> {
   lucid.selectWalletFromPrivateKey(userPrivKey);
-  const rdm: L.Redeemer = L.Data.to<NegativeRTimedRedeemer>(r,NegativeRTimedRedeemer);
+  const rdm: L.Redeemer = L.Data.to<NegativeRTimedRedeemer>(r, NegativeRTimedRedeemer);
   const utxoAtScript: L.UTxO[] = await lucid.utxosAt(negativeRTimedAddr);
-  const ourUTxO: L.UTxO[] = utxoAtScript.filter((utxo) => utxo.datum == L.Data.to<NegativeRTimedDatum>(dtm,NegativeRTimedDatum));
-  
-  if (ourUTxO && ourUTxO.length > 0) {
-      const tx = await lucid
-          .newTx()
-          .collectFrom(ourUTxO, rdm)
-          .attachSpendingValidator(negativeRTimedValidator)
-          .validFrom(emulator.now())
-          .complete();
+  const ourUTxO: L.UTxO[] = utxoAtScript.filter((utxo) => utxo.datum == L.Data.to<NegativeRTimedDatum>(dtm, NegativeRTimedDatum));
 
-      const signedTx = await tx.sign().complete();
-      const txHash = await signedTx.submit();
-      return txHash
+  if (ourUTxO && ourUTxO.length > 0) {
+    const tx = await lucid
+      .newTx()
+      .collectFrom(ourUTxO, rdm)
+      .attachSpendingValidator(negativeRTimedValidator)
+      // Because the script checks time for the deadline
+      .validFrom(emulator.now())
+      .complete();
+
+    const signedTx = await tx.sign().complete();
+    const txHash = await signedTx.submit();
+    return txHash
   }
   else throw new Error("UTxO's Expected!")
 }
 
+// @param n - the slot number, if it's before the deadline it should fail
 async function runTest(dtm: NegativeRTimedDatum, r: NegativeRTimedRedeemer, n: number) {
   // setup a new privateKey that we can use for testing.
   const user1: L.PrivateKey = L.generatePrivateKey();
@@ -71,23 +73,26 @@ async function runTest(dtm: NegativeRTimedDatum, r: NegativeRTimedRedeemer, n: n
   const address2: string = await (await L.Lucid.new(undefined, "Custom")).selectWalletFromPrivateKey(user2).wallet.address();
 
   // Setup the emulator and give our testing wallet 10000 ada. These funds get added to the genesis block.
-  const emulator = new L.Emulator([{ address: address1, assets: { lovelace: 10000000000n } }, { address: address2, assets: { lovelace: 10000000000n}}]);
+  const emulator = new L.Emulator([{ address: address1, assets: { lovelace: 10000000000n } }, { address: address2, assets: { lovelace: 10000000000n } }]);
   const lucid = await L.Lucid.new(emulator);
 
   // gets added to the first block in the emulator
-  await sendToScript(lucid,user1,dtm);
+  await sendToScript(lucid, user1, dtm);
 
   // wait n slots
   emulator.awaitSlot(n);
 
   // gets added to the (n+1)th block
-  await grabFunds(lucid,emulator,user2,dtm,r);
+  await grabFunds(lucid, emulator, user2, dtm, r);
 
   emulator.awaitBlock(10);
 
-  //console.log(await emulator.getUtxos(address2));
+  // console.log(await emulator.getUtxos(address2));
 }
-//await runTest({deadline:BigInt(Date.now()+20000*5+1000)},-42n,5*20);
+// On averarage a block is processed every 20 seconds, which is 20 thousand milliseconds
+// So 20seconds -> 20000 milllis, the deadline is set at 5 blocks
+// the redeemer is -42
+// await runTest({ deadline: BigInt(Date.now() + 20000 * 5 + 1000) }, -42n, 5 * 20 + 1);
 
 // UNIT tests
 
@@ -95,21 +100,21 @@ function testSucceed(
   str: string, // the string to display of the test
   r: bigint,   // the redeemer number
   d: bigint,   // the deadline in seconds from now
-  n:number     // the number of slots user 2 waits
+  n: number     // the number of slots user 2 waits
 ) {
-  Deno.test(str, async () => {await runTest({deadline:BigInt(Date.now())+d},r,n)})
+  Deno.test(str, async () => { await runTest({ deadline: BigInt(Date.now()) + d }, r, n) })
 }
 
 async function testFails(
   str: string, // the string to display of the test
   r: bigint,   // the redeemer number
   d: bigint,   // the deadline in seconds from now
-  n:number     // the number of slots user 2 waits
+  n: number     // the number of slots user 2 waits
 ) {
-  Deno.test(str,async () => {
+  Deno.test(str, async () => {
     let errorThrown = false;
     try {
-      await runTest({deadline:BigInt(Date.now())+d},r,n);
+      await runTest({ deadline: BigInt(Date.now()) + d }, r, n);
     } catch (error) {
       errorThrown = true;
     }
@@ -121,25 +126,25 @@ async function testFails(
 };
 
 // deadline is slot 100 and user 2 claims at slot 120
-testSucceed("UT: User 1 locks and user 2 takes with R = -42 after dealine; succeeds",-42n,BigInt(1000*100),120);
+testSucceed("UT: User 1 locks and user 2 takes with R = -42 after dealine; succeeds", -42n, BigInt(1000 * 100), 120);
 // deadline is slot 100 and user 2 claims at slot 120
-testSucceed("UT: User 1 locks and user 2 takes with R = 0 after dealine; succeeds",0n,BigInt(1000*100),120);
+testSucceed("UT: User 1 locks and user 2 takes with R = 0 after dealine; succeeds", 0n, BigInt(1000 * 100), 120);
 // deadline is slot 100 and user 2 claims at slot 120
-testFails("UT: User 1 locks and user 2 takes with R = 42 after dealine; fails",42n,BigInt(1000*100),120);
+testFails("UT: User 1 locks and user 2 takes with R = 42 after dealine; fails", 42n, BigInt(1000 * 100), 120);
 // deadline is slot 100 and user 2 claims at slot 80
-testFails("UT: User 1 locks and user 2 takes with R = -42 before dealine; fails",-42n,BigInt(1000*100),80);
+testFails("UT: User 1 locks and user 2 takes with R = -42 before dealine; fails", -42n, BigInt(1000 * 100), 80);
 // deadline is slot 100 and user 2 claims at slot 80
-testFails("UT: User 1 locks and user 2 takes with R = 0 before dealine; fails",-0n,BigInt(1000*100),80);
+testFails("UT: User 1 locks and user 2 takes with R = 0 before dealine; fails", -0n, BigInt(1000 * 100), 80);
 // deadline is slot 100 and user 2 claims at slot 80
-testFails("UT: User 1 locks and user 2 takes with R = 42 before dealine; fails",42n,BigInt(1000*100),80);
+testFails("UT: User 1 locks and user 2 takes with R = 42 before dealine; fails", 42n, BigInt(1000 * 100), 80);
 
 // Property test
-// set up a fixed deadline at slot 100
-const dl: number = 100*1000;
+// set up a fixed deadline at slot 100, one slot takes 1 second, which is 1000 millis
+const dl: number = 100 * 1000;
 // create only random 256 bit negative big integers for r.
-const negativeBigIntArbitrary = fc.bigIntN(256).filter((n:bigint) => n <= 0n);
+const negativeBigIntArbitrary = fc.bigIntN(256).filter((n: bigint) => n <= 0n);
 // create only random 256 bit positive big integers for r.
-const positiveBigIntArbitrary = fc.bigIntN(256).filter((n:bigint) => n > 0n); 
+const positiveBigIntArbitrary = fc.bigIntN(256).filter((n: bigint) => n > 0n);
 // create only random integers that represent claiming after the deadline
 const afterDeadlineWaits = fc.integer().filter((n: number) => n >= dl);
 // create only random integers that represent claiming before the deadline
@@ -147,41 +152,41 @@ const beforeDeadlineWaits = fc.integer().filter((n: number) => n < dl);
 
 Deno.test("PT: Negative redeemer after deadline always succeeds", () => {
   fc.assert(fc.asyncProperty(
-    negativeBigIntArbitrary, afterDeadlineWaits, async (r: bigint,n: number) => {
+    negativeBigIntArbitrary, afterDeadlineWaits, async (r: bigint, n: number) => {
       try {
-        await runTest({deadline:BigInt(Date.now()+dl)},r,n);
+        await runTest({ deadline: BigInt(Date.now() + dl) }, r, n);
       } catch (error) {
-        console.error('Test failed for r= '+ r +' with error: ' + error.message);
+        console.error('Test failed for r= ' + r + ' with error: ' + error.message);
         throw error
       };
     }
-  ),{numRuns: 100});
+  ), { numRuns: 100 });
 });
 
 Deno.test("PT: Positive redeemer after deadline always fails", () => {
   fc.assert(fc.asyncProperty(
-    positiveBigIntArbitrary, afterDeadlineWaits,async (r:bigint, n: number) => {
+    positiveBigIntArbitrary, afterDeadlineWaits, async (r: bigint, n: number) => {
       let errorThrown = false;
       try {
-        await runTest({deadline:BigInt(Date.now()+dl)},r,n);
+        await runTest({ deadline: BigInt(Date.now() + dl) }, r, n);
       } catch (error) {
         errorThrown = true;
       }
-      assert(errorThrown,'Test failed for r= ' + r + ' and n= '+ n);      
+      assert(errorThrown, 'Test failed for r= ' + r + ' and n= ' + n);
     }
-  ),{numRuns:100});
+  ), { numRuns: 100 });
 })
 
 Deno.test("PT: Anything before the deadline always fails", () => {
   fc.assert(fc.asyncProperty(
-    fc.bigIntN(256), beforeDeadlineWaits,async (r:bigint, n: number) => {
+    fc.bigIntN(256), beforeDeadlineWaits, async (r: bigint, n: number) => {
       let errorThrown = false;
       try {
-        await runTest({deadline:BigInt(Date.now()+dl)},r,n);
+        await runTest({ deadline: BigInt(Date.now() + dl) }, r, n);
       } catch (error) {
         errorThrown = true;
       }
-      assert(errorThrown,'Test failed for r= ' + r + ' and n= ' + n);      
+      assert(errorThrown, 'Test failed for r= ' + r + ' and n= ' + n);
     }
-  ),{numRuns:100});
+  ), { numRuns: 100 });
 })

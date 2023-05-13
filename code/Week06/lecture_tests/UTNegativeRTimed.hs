@@ -42,6 +42,8 @@ main = defaultMain $ do
 ---------------------------------------------------------------------------------------------------
 ------------------------------------- HELPER FUNCTIONS --------------------------------------------
 
+-- Right we are hardcoding when we are trying to consume the Tx, that's why 50 and 5000 above, fall before and after the deadline
+-- So after user1 creates the tx, we wait for a thousand, and then consume
 waitBeforeConsumingTx :: POSIXTime
 waitBeforeConsumingTx = 1000
 
@@ -52,6 +54,22 @@ setupUsers = replicateM 2 $ newUser $ ada (Lovelace 1000)
 -- Validator's script
 valScript :: TypedValidator datum redeemer
 valScript = TypedValidator $ toV2 OnChain.validator
+
+{-
+2 Helper methods,
+one to create the utxo at the script address,
+and one to consume it
+Transactions are monoids, Monoids have an operator to combine 2 values into 1, using mconcat
+so we can create a single complex transaction by combining multiple simple ones.
+In the case of the locking 
+we combine 
+ - everything the user has to spend in order to create the tx
+ - and another that indicates how we have to pay to the script 
+
+
+ The first uses payToScript
+ the second uses spendScript
+-}
 
 -- Create transaction that spends "usp" to lock "val" in "valScript"
 lockingTx :: POSIXTime -> UserSpend -> Value -> Tx
@@ -66,12 +84,13 @@ consumingTx :: POSIXTime -> Integer -> PubKeyHash -> TxOutRef -> Value -> Tx
 consumingTx dl redeemer usr ref val =
   mconcat
     [ spendScript valScript ref (mkI redeemer) (OnChain.MkCustomDatum dl)
-    , payToKey usr val
+    , payToKey usr val -- Where to pay the unlocked value
     ]
 
 ---------------------------------------------------------------------------------------------------
 ------------------------------------- TESTING REDEEMERS -------------------------------------------
 
+-- PosixTime for the Datum, Integer for the Redeemer.
 -- Function to test if both creating and consuming script UTxOs works properly
 testScript :: POSIXTime -> Integer -> Run ()
 testScript d r = do
@@ -86,6 +105,7 @@ testScript d r = do
   -- USER 2 TAKES "val" FROM VALIDATOR
   utxos <- utxoAt valScript                 -- Query blockchain to get all UTxOs at script
   let [(ref, out)] = utxos                  -- We know there is only one UTXO (the one we created before)
+  -- We waited for 1000,  so this will create an interval 1000 +- 100, so [900,1100]
   ct <- currentTimeRad 100                  -- Create time interval with equal radius around current time
   tx <- validateIn ct $ consumingTx d r u2 ref (txOutValue out)  -- Build Tx
   submitTx u2 tx                            -- User 2 submits "consumingTx" transaction

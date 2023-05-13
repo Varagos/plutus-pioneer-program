@@ -87,8 +87,13 @@ consumingTx dl redeemer usr ref val =
 ---------------------------------------------------------------------------------------------------
 ------------------------------------- TESTING PROPERTIES ------------------------------------------
 
-
+-- We have hardcoded above that we will always consume this utxo at time = 1000
+-- False if we expect it to fail, and True to pass
+-- We filter, keeping only the randomly generated d's that are > 1001, so in this case
+-- any deadline that is >1001, it should always fail so we return False
 -- All redeemers fail before deadline 
+
+-- Only the values that pass the filter, are piped with ==> to the runChecks fuction
 prop_Before_Fails :: POSIXTime -> Integer -> Property
 prop_Before_Fails d r = (d > 1001) ==> runChecks False d r
 
@@ -106,11 +111,12 @@ prop_NegativeAfter_Succeeds d r = (r < 0 && d < 999) ==> runChecks True d r
 
 
 -- | Check that the expected and real balances match after using the validator with different redeemers
+-- Only check is our code here, the rest can be considered boilerplate
 runChecks :: Bool -> POSIXTime -> Integer -> Property
 runChecks shouldConsume deadline redeemer = 
   collect (redeemer, getPOSIXTime deadline) $ monadic property check
     where check = do
-            balancesMatch <- run $ testValues shouldConsume deadline redeemer
+            balancesMatch <- run $ testValues shouldConsume deadline redeemer -- Here we provide all the finalvalues to the testValues function
             assert balancesMatch
 
 
