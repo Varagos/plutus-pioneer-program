@@ -69,14 +69,21 @@ export const AppStateContext = createContext<{
     setAppState: Dispatch<SetStateAction<AppState>>;
 }>({ appState: initialAppState, setAppState: () => {} });
 
+
 export default function App({ Component, pageProps }: AppProps) {
     const [appState, setAppState] = useState<AppState>(initialAppState);
 
+
     const connectLucidAndNami = async () => {
+        // const projectId = 'previewsKVSTHsY3c2sWpsRpJRjs9KiOLaSRmht'
+        const blackFrostKey = process.env.NEXT_PUBLIC_BLACKFROST_KEY
+        console.log({blackFrostKey})
         const lucid = await Lucid.new(
             new Blockfrost(
                 "https://cardano-preview.blockfrost.io/api/v0",
-                "previewfz0NMrCf2gTuGYmnkzB4KfNmM3qzYBzL"
+                blackFrostKey
+                // blackFrostKey
+                // 'previewsKVSTHsY3c2sWpsRpJRjs9KiOLaSRmht' // blackFrostKey
             ),
             "Preview"
         );
