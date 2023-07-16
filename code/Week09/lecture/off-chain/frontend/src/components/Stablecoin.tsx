@@ -127,6 +127,7 @@ export default function Stablecoin() {
 
             const tx = await lucid!
                 .newTx()
+                // Reference inputs(and ref scripts)
                 .readFrom([oracleWithNftUTxO, mintingPolRefScrUTxO])
                 .payToContract(
                     collateralAddr,
@@ -140,6 +141,8 @@ export default function Stablecoin() {
                 )
                 .mintAssets(
                     { [scAssetClassHex]: amountToMint },
+                    // Because we are running the minting script when minting, we have
+                    // to provide a redeemer, (value = 'Mint')
                     Data.to<MintRedeemer>("Mint", MintRedeemer)
                 )
                 .addSignerKey(pkh)
@@ -193,7 +196,11 @@ export default function Stablecoin() {
                     { [scAssetClassHex]: -amountToBurnOrLiq },
                     Data.to<MintRedeemer>(mpRed, MintRedeemer)
                 )
+                // Needed for the burning, not the liquidationm, but we add it anyway for both
+                // it doesn't hurt
                 .addSignerKey(pkh)
+                // This native Untyped plutus core flag is to choose which compiler to use
+                // to check the validators locally. we can remove it and it's the same
                 .complete({ nativeUplc: false });
 
             await signAndSubmitTx(tx);

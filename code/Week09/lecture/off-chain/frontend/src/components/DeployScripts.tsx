@@ -78,13 +78,15 @@ export default function DeployScripts() {
             .payToAddressWithData(
                 wAddr,
                 { inline: Data.void(), scriptRef: collateralScript },
-                {}
+                {} // Empty value, when we balance the tx, it will provide the amount needed
+                // to create a utxo
             )
             .payToAddressWithData(
                 wAddr,
                 { inline: Data.void(), scriptRef: psu.scPolicy },
-                {}
+                {} // Same as above
             )
+            // Balance the tx
             .complete();
 
         const pid = await signAndSubmitTx(tx);

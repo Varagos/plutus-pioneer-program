@@ -1,67 +1,52 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module Oracle where
 
-import Plutus.V2.Ledger.Api
-    ( BuiltinData,
-      ScriptContext(scriptContextTxInfo),
-      mkValidatorScript,
-      PubKeyHash,
-      Datum(Datum),
-      Validator,
-      TxInInfo(txInInfoResolved),
-      TxInfo,
-      OutputDatum(OutputDatumHash, NoOutputDatum, OutputDatum),
-      TxOut(txOutDatum, txOutValue), UnsafeFromData (unsafeFromBuiltinData) )
-import Plutus.V2.Ledger.Contexts
-    ( findDatum,
-      getContinuingOutputs,
-      txSignedBy,
-      findOwnInput )    
-import PlutusTx
-    ( compile,
-      unstableMakeIsData,
-      FromData(fromBuiltinData),
-      liftCode,
-      applyCode,
-      makeLift, CompiledCode )
-import PlutusTx.Prelude
-    ( Bool,
-      Integer,
-      Maybe(..),
-      ($),
-      (.),
-      (&&),
-      tail,
-      isJust,
-      traceError,
-      traceIfFalse,
-      Eq(..), 
-      take 
-      )
-import           Prelude                    (Show (show), span, IO)
-import qualified  Prelude               ((/=) )
-import Data.String ( IsString(fromString), String )
-import Plutus.V1.Ledger.Value
-    ( assetClassValueOf, AssetClass(AssetClass) )
-import           Utilities            (wrapValidator, writeValidatorToFile, writeCodeToFile)
-import Text.Printf (printf)
+import           Data.String               (IsString (fromString), String)
+import           Plutus.V1.Ledger.Value    (AssetClass (AssetClass),
+                                            assetClassValueOf)
+import           Plutus.V2.Ledger.Api      (BuiltinData, Datum (Datum),
+                                            OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash),
+                                            PubKeyHash,
+                                            ScriptContext (scriptContextTxInfo),
+                                            TxInInfo (txInInfoResolved), TxInfo,
+                                            TxOut (txOutDatum, txOutValue),
+                                            UnsafeFromData (unsafeFromBuiltinData),
+                                            Validator, mkValidatorScript)
+import           Plutus.V2.Ledger.Contexts (findDatum, findOwnInput,
+                                            getContinuingOutputs, txSignedBy)
+import           PlutusTx                  (CompiledCode,
+                                            FromData (fromBuiltinData),
+                                            applyCode, compile, liftCode,
+                                            makeLift, unstableMakeIsData)
+import           PlutusTx.Prelude          (Bool, Eq (..), Integer, Maybe (..),
+                                            isJust, tail, take, traceError,
+                                            traceIfFalse, ($), (&&), (.))
+import           Prelude                   (IO, Show (show), span)
+import qualified Prelude                   ((/=))
+import           Text.Printf               (printf)
+import           Utilities                 (wrapValidator, writeCodeToFile,
+                                            writeValidatorToFile)
 
 ---------------------------------------------------------------------------------------------------
 ----------------------------- ON-CHAIN: HELPER FUNCTIONS/TYPES ------------------------------------
 
+--  We have extracted this function, so it can be used in other validators.
+-- It tries to parse the datum, it returns Nothing if it fails.
 {-# INLINABLE parseOracleDatum #-}
 parseOracleDatum :: TxOut -> TxInfo -> Maybe Integer
 parseOracleDatum o info = case txOutDatum o of
     NoOutputDatum -> Nothing
+    -- If there is a datum, we try to parse it.
     OutputDatum (Datum d) -> PlutusTx.fromBuiltinData d
+    -- If there is a hash of a datum, we find the datum and try to parse it.
     OutputDatumHash dh -> do
                         Datum d <- findDatum dh info
                         PlutusTx.fromBuiltinData d
@@ -69,25 +54,30 @@ parseOracleDatum o info = case txOutDatum o of
 ---------------------------------------------------------------------------------------------------
 ----------------------------------- ON-CHAIN / VALIDATOR ------------------------------------------
 
+-- This is what we parameterize our oracle with.
+-- The NFT, and the operator that is able to update and delete the oracle.
 data OracleParams = OracleParams
-    { oNFT        :: AssetClass
-    , oOperator   :: PubKeyHash
-    } 
+    { oNFT      :: AssetClass
+    , oOperator :: PubKeyHash
+    }
 PlutusTx.makeLift ''OracleParams
 
 data OracleRedeemer = Update | Delete
     deriving Prelude.Show
 PlutusTx.unstableMakeIsData ''OracleRedeemer
 
+-- The rate of the USD/Ada, (how many cents is 1 Ada worth)
 -- Oracle Datum
 type Rate = Integer
 
+-- Here we ignore the rate, we read it as reference input when used in other validators,
+-- but this validator doesn't really know to the exact value of the rate. just that's its a valid number.
 {-# INLINABLE mkValidator #-}
 mkValidator :: OracleParams -> Rate -> OracleRedeemer -> ScriptContext -> Bool
 mkValidator oracle _ r ctx =
     case r of
-        Update -> traceIfFalse "token missing from input"   inputHasToken  &&
-                  traceIfFalse "token missing from output"  outputHasToken &&
+        Update -> traceIfFalse "token missing from input"   inputHasToken  && -- We want the token both as input
+                  traceIfFalse "token missing from output"  outputHasToken && -- and as output. (coming in and coming out)
                   traceIfFalse "operator signature missing" checkOperatorSignature &&
                   traceIfFalse "invalid output datum"       validOutputDatum
         Delete -> traceIfFalse "operator signature missing" checkOperatorSignature
@@ -142,7 +132,8 @@ validator oracle = mkValidatorScript $
 
 
 {-# INLINABLE  mkWrappedValidatorLucid #-}
---                            CS              TN           operator        rate          redeemer       context
+--                           CurrencySymbol  TokenName     PubKeyHash
+--                            CS               TN           operator        rate          redeemer       context
 mkWrappedValidatorLucid :: BuiltinData ->  BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> ()
 mkWrappedValidatorLucid cs tn pkh = wrapValidator $ mkValidator op
     where

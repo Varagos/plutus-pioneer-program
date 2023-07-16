@@ -74,10 +74,12 @@ export default function Home() {
                         type="address"
                         value={
                             wAddr
-                                ? `${wAddr.substring(
-                                      0,
-                                      15
-                                  )}...${wAddr.substring(100)}`
+                                ? 
+                                wAddr
+                                // `${wAddr.substring(
+                                //       0,
+                                //       15
+                                //   )}...${wAddr.substring(100)}`
                                 : ""
                         }
                     />

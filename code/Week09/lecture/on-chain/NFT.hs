@@ -26,6 +26,12 @@ import           Utilities                  (bytesToHex, currencySymbol,
                                              wrapPolicy, writeCodeToFile,
                                              writePolicyToFile)
 
+-- An NFT is parameterized with a utxo, so it can only be minted once.
+-- Check that the minting policy has to consume the utxo pass as argument(oref) AND
+-- the amount to be MINT is 1.
+{- So this minting policy will only be able to run once, since after we consume that utxo
+there will be no way for it to return true again (a utxo can be spent only once! :)
+-}
 {-# INLINABLE mkNFTPolicy #-}
 mkNFTPolicy :: TxOutRef -> TokenName -> () -> ScriptContext -> Bool
 mkNFTPolicy oref tn () ctx = traceIfFalse "UTxO not consumed"   hasUTxO           &&
@@ -34,6 +40,7 @@ mkNFTPolicy oref tn () ctx = traceIfFalse "UTxO not consumed"   hasUTxO         
     info :: TxInfo
     info = scriptContextTxInfo ctx
 
+    -- Check that if any of our inputs, has a reference equal to the one we have parameterized.
     hasUTxO :: Bool
     hasUTxO = any (\i -> txInInfoOutRef i == oref) $ txInfoInputs info
 

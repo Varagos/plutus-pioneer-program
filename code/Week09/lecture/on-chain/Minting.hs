@@ -1,38 +1,54 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NumericUnderscores #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE NumericUnderscores    #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 
 module Minting where
 
-import Plutus.V2.Ledger.Api      ( OutputDatum(..), TxOut(txOutAddress, txOutValue),
-                                   Value, ScriptContext(scriptContextTxInfo),
-                                   TxInfo(txInfoReferenceInputs, txInfoMint),
-                                   BuiltinData, mkMintingPolicyScript, adaToken,
-                                   adaSymbol, MintingPolicy, TxInInfo(txInInfoResolved),
-                                   txInfoInputs, txOutDatum, UnsafeFromData (unsafeFromBuiltinData),
-                                   ValidatorHash, txOutValue)
-import Plutus.V1.Ledger.Value    ( assetClassValueOf, AssetClass(AssetClass), valueOf )
-import Plutus.V1.Ledger.Address  ( scriptHashAddress )
-import Plutus.V2.Ledger.Contexts ( txSignedBy, scriptOutputsAt, ownCurrencySymbol )
-import PlutusTx                  ( compile, unstableMakeIsData,
-                                   liftCode, applyCode, makeLift, CompiledCode )
-import PlutusTx.Prelude          ( Bool(False), Integer, Maybe(..), (.), negate, traceError,
-                                   (&&), traceIfFalse, ($), Ord((<), (>), (>=)), Eq((==)), divide,
-                                   MultiplicativeSemigroup((*)))
-import qualified Prelude         ( Show, IO)
-import           Oracle          ( parseOracleDatum)
-import           Collateral      ( CollateralDatum (..), stablecoinTokenName, parseCollateralDatum)
-import           Utilities       (wrapPolicy, writeCodeToFile)
+import           Collateral                (CollateralDatum (..),
+                                            parseCollateralDatum,
+                                            stablecoinTokenName)
+import           Oracle                    (parseOracleDatum)
+import           Plutus.V1.Ledger.Address  (scriptHashAddress)
+import           Plutus.V1.Ledger.Value    (AssetClass (AssetClass),
+                                            assetClassValueOf, valueOf)
+import           Plutus.V2.Ledger.Api      (BuiltinData, MintingPolicy,
+                                            OutputDatum (..),
+                                            ScriptContext (scriptContextTxInfo),
+                                            TxInInfo (txInInfoResolved),
+                                            TxInfo (txInfoMint, txInfoReferenceInputs),
+                                            TxOut (txOutAddress, txOutValue),
+                                            UnsafeFromData (unsafeFromBuiltinData),
+                                            ValidatorHash, Value, adaSymbol,
+                                            adaToken, mkMintingPolicyScript,
+                                            txInfoInputs, txOutDatum,
+                                            txOutValue)
+import           Plutus.V2.Ledger.Contexts (ownCurrencySymbol, scriptOutputsAt,
+                                            txSignedBy)
+import           PlutusTx                  (CompiledCode, applyCode, compile,
+                                            liftCode, makeLift,
+                                            unstableMakeIsData)
+import           PlutusTx.Prelude          (Bool (False), Eq ((==)), Integer,
+                                            Maybe (..),
+                                            MultiplicativeSemigroup ((*)),
+                                            Ord ((<), (>), (>=)), divide,
+                                            negate, traceError, traceIfFalse,
+                                            ($), (&&), (.))
+import qualified Prelude                   (IO, Show)
+import           Utilities                 (wrapPolicy, writeCodeToFile)
 
 ---------------------------------------------------------------------------------------------------
 ------------------------------------ ON-CHAIN: VALIDATOR ------------------------------------------
 
 -- Oracle and collateral validator hashes are passed as parameters
+{--  By passing them as parameters, we make sure this specific policy,
+will only work for that specific oracle and collateral,
+the third is the minPercent of collateral required to mint the stablecoin
+--}
 data MintParams = MintParams
     { mpOracleValidator      :: ValidatorHash
     , mpCollateralValidator  :: ValidatorHash
@@ -54,8 +70,9 @@ unstableMakeIsData ''MintRedeemer
 mkPolicy :: MintParams -> MintRedeemer -> ScriptContext -> Bool
 mkPolicy mp r ctx = case r of
     Mint      -> traceIfFalse "minted amount must be positive" checkMintPositive &&
-                 traceIfFalse "minted amount exceeds max" checkMaxMintOut &&
-                 traceIfFalse "invalid datum at collateral output" checkDatum
+                 traceIfFalse "minted amount exceeds max" checkMaxMintOut && -- have to check minPercent is fulfilled
+                 traceIfFalse "invalid datum at collateral output" checkDatum -- make sure it also creates a utxo at the collateral's address
+                 -- with the correct values and structure
 
     Burn      -> traceIfFalse "invalid burning amount" checkBurnAmountMatchesColDatum &&
                  traceIfFalse "owner's signature missing" checkColOwner &&
@@ -64,7 +81,7 @@ mkPolicy mp r ctx = case r of
     Liquidate -> traceIfFalse "invalid liquidating amount" checkBurnAmountMatchesColDatum &&
                  traceIfFalse "liquidation threshold not reached" checkLiquidation &&
                  traceIfFalse "Minting instead of burning!" checkBurnNegative
-                 
+
     where
     info :: TxInfo
     info = scriptContextTxInfo ctx
@@ -79,7 +96,7 @@ mkPolicy mp r ctx = case r of
         where
             oracleInputs :: [TxOut]
             oracleInputs = [ o
-                           | i <- txInfoReferenceInputs info
+                           | i <- txInfoReferenceInputs info -- notice we use txInfoReferenceInputs, we reference the oracle, not consume it
                            , let o = txInInfoResolved i
                            , txOutAddress o == scriptHashAddress (mpOracleValidator mp)
                            ]
@@ -95,6 +112,7 @@ mkPolicy mp r ctx = case r of
 
     -- Get amount of stablecoins to minted (or burned if negative) in this transaction
     mintedAmount :: Integer
+    -- using txInfoMint
     mintedAmount = assetClassValueOf (txInfoMint info) (AssetClass (ownCurrencySymbol ctx, stablecoinTokenName))
 
     -- Check that the amount of stablecoins minted is positive
@@ -115,14 +133,14 @@ mkPolicy mp r ctx = case r of
     CMP = mpCollateralMinPercent
 
 
-                      ca [L]        rate [USD¢/ADA]                 ca [L]       
+                      ca [L]        rate [USD¢/ADA]                 ca [L]
                  --------------- * ------------------           --------------- * rate [USD/ADA]
-                      CMP [%]        100 [USD¢/USD]                   CMP                         
-                    ---------                                               
-                      100 [%]                                               
+                      CMP [%]        100 [USD¢/USD]                   CMP
+                    ---------
+                      100 [%]
     maxMint = ------------------------------------------- =  ------------------------------------- = [USD]
                         1_000_000 [L/A]                                1_000_000 [L/A]
-    
+
     -}
     maxMint :: Integer -> Integer
     maxMint collAmount = (collAmount `divide` mpCollateralMinPercent mp * rate) `divide` 1_000_000
@@ -151,11 +169,11 @@ mkPolicy mp r ctx = case r of
         where
             (_,v) = collateralOutput
 
-    -- Check that the collateral's output datum has the correct values
+    -- Check that the collateral's output datum has the correct values -- pretty simple
     checkDatum :: Bool
     checkDatum = case collateralOutputDatum of
         Nothing -> False
-        Just d  -> colMintingPolicyId d  == ownCurrencySymbol ctx &&
+        Just d  -> colMintingPolicyId d  == ownCurrencySymbol ctx && -- make sure we are not creating a datum for a different coin.
                    colStablecoinAmount d == mintedAmount &&
                    txSignedBy info (colOwner d)
 
